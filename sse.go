@@ -111,12 +111,12 @@ func (s *SSE) handleWS(w http.ResponseWriter, r *http.Request) {
 		// log.Println(r.RemoteAddr, s.Data)
 		select {
 		case <-time.After(s.MaxMessageInterval):
-			if err := c.Write(context.TODO(), websocket.MessageText, []byte(s.Data)); err != nil {
+			if err := c.Write(context.TODO(), websocket.MessageBinary, []byte(s.Data)); err != nil {
 				// log.Println(err)
 				return
 			}
 		case <-s.Clients[cid]:
-			if err := c.Write(context.TODO(), websocket.MessageText, []byte(s.Data)); err != nil {
+			if err := c.Write(context.TODO(), websocket.MessageBinary, []byte(s.Data)); err != nil {
 				// log.Println(err)
 				return
 			}
