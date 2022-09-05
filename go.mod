@@ -1,6 +1,6 @@
 module github.com/btwiuse/sse
 
-go 1.18
+go 1.19
 
 require nhooyr.io/websocket v1.8.7
 
