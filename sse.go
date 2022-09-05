@@ -14,7 +14,7 @@ import (
 )
 
 func (s *SSE) broadcast() {
-	log.Println(s.Clients)
+	// log.Println(s.Clients)
 	s.clock.RLock()
 	defer s.clock.RUnlock()
 	for cid, _ := range s.Clients {
@@ -29,6 +29,16 @@ func (s *SSE) broadcast() {
 func (s *SSE) SetData(data string) {
 	s.Data = data
 	s.broadcast()
+}
+
+func (s *SSE) handlePoll(w http.ResponseWriter, r *http.Request) error {
+	_, err := fmt.Fprintf(w, "%s", s.Data)
+	if err != nil {
+		return err
+	}
+	w.(http.Flusher).Flush()
+	// log.Println(r.RemoteAddr, data)
+	return nil
 }
 
 func (s *SSE) handleSSEOnce(w http.ResponseWriter, r *http.Request) error {
@@ -138,7 +148,7 @@ func (s *SSE) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case isSSE:
 		s.handleSSE(w, r)
 	default:
-		s.handleSSEOnce(w, r)
+		s.handlePoll(w, r)
 	}
 }
 
