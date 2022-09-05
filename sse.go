@@ -90,7 +90,10 @@ func (s *SSE) handleSSE(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *SSE) handleWS(w http.ResponseWriter, r *http.Request) {
-	c, err := websocket.Accept(w, r, nil)
+	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		InsecureSkipVerify: true,
+		OriginPatterns:     []string{"*"},
+	})
 	if err != nil {
 		log.Println(err)
 		return
