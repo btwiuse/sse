@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -54,8 +55,17 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, IndexHtml)
 }
 
+func envPORT(p string) string {
+	PORT := p
+	if port, ok := os.LookupEnv("PORT"); ok {
+		PORT = ":" + port
+	}
+	return PORT
+}
+
 func main() {
+	port := envPORT(":8080")
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
-	log.Println("listening on http://127.0.0.1:8080")
-	log.Fatalln(http.ListenAndServe(":8080", indexWith(DateSSE())))
+	log.Println(fmt.Sprintf("listening on http://127.0.0.1%s", port))
+	log.Fatalln(http.ListenAndServe(port, indexWith(DateSSE())))
 }
