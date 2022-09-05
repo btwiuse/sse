@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"nhooyr.io/websocket"
@@ -14,7 +15,13 @@ import (
 
 func (s *SSE) broadcast() {
 	log.Println(s.Clients)
+	s.clock.RLock()
+	defer s.clock.RUnlock()
 	for cid, _ := range s.Clients {
+		if len(s.Clients[cid]) > 3 {
+			log.Println("[SSE::WARN] client has too many unconsumed messages, which shouldn't happen. Skip notification.", cid)
+			continue
+		}
 		s.Clients[cid] <- struct{}{}
 	}
 }
@@ -35,30 +42,39 @@ func (s *SSE) handleSSEOnce(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+func (s *SSE) addClient(cid int) {
+	s.clock.Lock()
+	s.Clients[cid] = make(chan struct{}, 4)
+	s.clock.Unlock()
+}
+
+func (s *SSE) removeClient(cid int) {
+	s.clock.Lock()
+	delete(s.Clients, cid)
+	s.clock.Unlock()
+}
+
 func (s *SSE) handleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	cid := s.nextID()
-	s.Clients[cid] = make(chan struct{}, 10)
+	s.addClient(cid)
 	defer func() {
-		log.Println("delete sse", cid)
-		delete(s.Clients, cid)
+		// log.Println("delete sse", cid)
+		s.removeClient(cid)
 	}()
-	quit := make(chan struct{})
 
 	for {
 		select {
 		case <-time.After(s.MaxMessageInterval):
 			if err := s.handleSSEOnce(w, r); err != nil {
-				log.Println(err)
+				// log.Println(err)
 				return
 			}
 		case <-s.Clients[cid]:
 			if err := s.handleSSEOnce(w, r); err != nil {
-				log.Println(err)
+				// log.Println(err)
 				return
 			}
-		case <-quit:
-			return
 		}
 	}
 }
@@ -72,10 +88,10 @@ func (s *SSE) handleWS(w http.ResponseWriter, r *http.Request) {
 	defer c.Close(websocket.StatusInternalError, "")
 
 	cid := s.nextID()
-	s.Clients[cid] = make(chan struct{}, 10)
+	s.addClient(cid)
 	defer func() {
-		log.Println("delete ws", cid)
-		delete(s.Clients, cid)
+		// log.Println("delete ws", cid)
+		s.removeClient(cid)
 	}()
 
 	quit := make(chan struct{})
@@ -84,7 +100,7 @@ func (s *SSE) handleWS(w http.ResponseWriter, r *http.Request) {
 		for {
 			_, _, err := c.Read(context.TODO())
 			if err != nil {
-				log.Println(err)
+				// log.Println(err)
 				close(quit)
 				return
 			}
@@ -96,12 +112,12 @@ func (s *SSE) handleWS(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-time.After(s.MaxMessageInterval):
 			if err := c.Write(context.TODO(), websocket.MessageText, []byte(s.Data)); err != nil {
-				log.Println(err)
+				// log.Println(err)
 				return
 			}
 		case <-s.Clients[cid]:
 			if err := c.Write(context.TODO(), websocket.MessageText, []byte(s.Data)); err != nil {
-				log.Println(err)
+				// log.Println(err)
 				return
 			}
 		case <-quit:
@@ -129,6 +145,7 @@ func (s *SSE) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type SSE struct {
 	nid                int
 	Data               string
+	clock              *sync.RWMutex
 	Clients            map[int]chan struct{}
 	MaxMessageInterval time.Duration
 }
@@ -142,6 +159,7 @@ func NewSSE() *SSE {
 	sse := &SSE{
 		MaxMessageInterval: 3 * time.Second,
 		Clients:            map[int]chan struct{}{},
+		clock:              &sync.RWMutex{},
 		nid:                0,
 	}
 	return sse
