@@ -16,6 +16,8 @@ func indexWith(s *sse.SSE) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
+		w.Header().Set("Alt-Svc", `h3=":8080"`)
+
 		isIndex := r.URL.Path == "/"
 		isFavicon := r.URL.Path == "/favicon.ico"
 		isSSE := strings.Split(r.Header.Get("Accept"), ",")[0] == "text/event-stream"
