@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/btwiuse/h3/utils"
 	"github.com/btwiuse/sse"
 )
 
@@ -68,6 +69,13 @@ func envPORT(p string) string {
 func main() {
 	port := envPORT(":8080")
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+	go func() {
+		wts := webtransportServer(port)
+		cert := utils.EnvCert("localhost.pem")
+		key := utils.EnvKey("localhost-key.pem")
+		log.Println(fmt.Sprintf("listening on https://127.0.0.1%s", port))
+		log.Fatalln(wts.ListenAndServeTLS(cert, key))
+	}()
 	log.Println(fmt.Sprintf("listening on http://127.0.0.1%s", port))
 	log.Fatalln(http.ListenAndServe(port, indexWith(DateSSE())))
 }
