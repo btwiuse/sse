@@ -2,20 +2,24 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"time"
 
+	// "github.com/btwiuse/h3/utils"
 	"github.com/ebi-yade/altsvc-go"
+	"github.com/marten-seemann/webtransport-go"
 	"k0s.io/pkg/dial"
 	"nhooyr.io/websocket"
 )
 
 func main() {
-	u, err := url.Parse("ws://127.0.0.1:8080")
+	u, err := url.Parse("ws://localhost:8080")
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -55,10 +59,33 @@ func dial3(u *url.URL) (net.Conn, error) {
 	}
 	endpoints, ok := extractH3(resp.Header)
 	if ok {
+		ep := endpoints[0]
 		log.Println("Found", endpoints)
-		log.Println("TODO: switch to webtransport")
+		log.Println("switch to webtransport", ep, u.Host)
+		// use u.Host for now
+
+		ur := fmt.Sprintf("https://%s", u.Host)
+		ctx, _ := context.WithTimeout(context.TODO(), time.Second)
+		var d webtransport.Dialer
+		log.Printf("dialing %s (UDP)", ur)
+		resp, conn, err := d.Dial(ctx, ur, nil)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		_ = resp
+		handleConn(conn)
+		return nil, nil
 	}
 	return websocket.NetConn(context.Background(), wsconn, websocket.MessageBinary), nil
+}
+
+type HostPort struct {
+	Host string
+	Port string
+}
+
+func (hp *HostPort) String() string {
+	return hp.Host + ":" + hp.Port
 }
 
 func extractH3(h http.Header) ([]string, bool) {
@@ -79,4 +106,16 @@ func extractH3(h http.Header) ([]string, bool) {
 		}
 	}
 	return results, len(results) > 0
+}
+
+func handleConn(conn *webtransport.Session) {
+	log.Println("new conn", conn.LocalAddr())
+	ctx, _ := context.WithTimeout(context.TODO(), time.Second)
+	stream, err := conn.OpenStreamSync(ctx)
+	if err != nil {
+		log.Println("error opening stream:", err)
+		return
+	}
+	go io.Copy(os.Stdout, stream)
+	io.Copy(stream, os.Stdin)
 }
