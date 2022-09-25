@@ -76,15 +76,13 @@ func (s *SSE) handleSSE(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case <-time.After(s.MaxMessageInterval):
-			if err := s.handleSSEOnce(w, r); err != nil {
-				// log.Println(err)
-				return
-			}
+			break
 		case <-s.Clients[cid]:
-			if err := s.handleSSEOnce(w, r); err != nil {
-				// log.Println(err)
-				return
-			}
+			break
+		}
+		if err := s.handleSSEOnce(w, r); err != nil {
+			// log.Println(err)
+			return
 		}
 	}
 }
@@ -110,6 +108,7 @@ func (s *SSE) handleWS(w http.ResponseWriter, r *http.Request) {
 	quit := make(chan struct{})
 
 	go func() {
+		// read indefinitely to detect client close
 		for {
 			_, _, err := c.Read(context.TODO())
 			if err != nil {
@@ -124,16 +123,14 @@ func (s *SSE) handleWS(w http.ResponseWriter, r *http.Request) {
 		// log.Println(r.RemoteAddr, s.Data)
 		select {
 		case <-time.After(s.MaxMessageInterval):
-			if err := c.Write(context.TODO(), websocket.MessageBinary, []byte(s.Data)); err != nil {
-				// log.Println(err)
-				return
-			}
+			break
 		case <-s.Clients[cid]:
-			if err := c.Write(context.TODO(), websocket.MessageBinary, []byte(s.Data)); err != nil {
-				// log.Println(err)
-				return
-			}
+			break
 		case <-quit:
+			return
+		}
+		if err := c.Write(context.TODO(), websocket.MessageBinary, []byte(s.Data)); err != nil {
+			// log.Println(err)
 			return
 		}
 	}
