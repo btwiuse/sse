@@ -7,22 +7,20 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/btwiuse/gmx"
 	"nhooyr.io/websocket"
 )
 
 func (s *SSE) broadcast() {
-	// log.Println(s.Clients)
-	s.clock.RLock()
-	defer s.clock.RUnlock()
-	for cid, _ := range s.Clients {
-		if len(s.Clients[cid]) > 3 {
+	clients := s.Clients()
+	for cid, _ := range clients {
+		if len(clients[cid]) > 3 {
 			log.Println("[SSE::WARN] client has too many unconsumed messages, which shouldn't happen. Skip notification.", cid)
 			continue
 		}
-		s.Clients[cid] <- struct{}{}
+		clients[cid] <- struct{}{}
 	}
 }
 
@@ -53,15 +51,15 @@ func (s *SSE) handleSSEOnce(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *SSE) addClient(cid int) {
-	s.clock.Lock()
-	s.Clients[cid] = make(chan struct{}, 4)
-	s.clock.Unlock()
+	s.StateMutex.Do(InitCid(cid))
 }
 
 func (s *SSE) removeClient(cid int) {
-	s.clock.Lock()
-	delete(s.Clients, cid)
-	s.clock.Unlock()
+	s.StateMutex.Do(RemoveCid(cid))
+}
+
+func (s *SSE) Clients() Clients {
+	return s.StateMutex.Unwrap().Clients
 }
 
 func (s *SSE) handleSSE(w http.ResponseWriter, r *http.Request) {
@@ -77,7 +75,7 @@ func (s *SSE) handleSSE(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-time.After(s.MaxMessageInterval):
 			break
-		case <-s.Clients[cid]:
+		case <-s.Clients()[cid]:
 			break
 		}
 		if err := s.handleSSEOnce(w, r); err != nil {
@@ -124,7 +122,7 @@ func (s *SSE) handleWS(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-time.After(s.MaxMessageInterval):
 			break
-		case <-s.Clients[cid]:
+		case <-s.Clients()[cid]:
 			break
 		case <-quit:
 			return
@@ -155,8 +153,7 @@ func (s *SSE) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type SSE struct {
 	nid                int
 	Data               string
-	clock              *sync.RWMutex
-	Clients            map[int]chan struct{}
+	StateMutex         *gmx.RwMx[State]
 	MaxMessageInterval time.Duration
 }
 
@@ -168,9 +165,30 @@ func (s *SSE) nextID() int {
 func NewSSE() *SSE {
 	sse := &SSE{
 		MaxMessageInterval: 3 * time.Second,
-		Clients:            map[int]chan struct{}{},
-		clock:              &sync.RWMutex{},
-		nid:                0,
+		StateMutex: gmx.RwWrap(
+			&State{
+				Clients: Clients{},
+			},
+		),
+		nid: 0,
 	}
 	return sse
+}
+
+type Clients = map[int]chan struct{}
+
+type State struct {
+	Clients map[int]chan struct{}
+}
+
+func InitCid(cid int) gmx.Mutation[State] {
+	return func(s *State) {
+		s.Clients[cid] = make(chan struct{}, 4)
+	}
+}
+
+func RemoveCid(cid int) gmx.Mutation[State] {
+	return func(s *State) {
+		delete(s.Clients, cid)
+	}
 }
