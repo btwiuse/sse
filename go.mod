@@ -1,10 +1,8 @@
 module github.com/btwiuse/sse
 
-go 1.19
+go 1.25
 
 require (
-	github.com/btwiuse/gmx v0.0.1
-	nhooyr.io/websocket v1.8.7
+	github.com/btwiuse/gmx v0.0.2
+	github.com/coder/websocket v1.8.13
 )
-
-require github.com/klauspost/compress v1.10.3 // indirect

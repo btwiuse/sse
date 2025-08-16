@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/btwiuse/gmx"
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 func (s *SSE) broadcast() {
@@ -51,15 +51,15 @@ func (s *SSE) handleSSEOnce(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *SSE) addClient(cid int) {
-	s.StateMutex.Do(InitCid(cid))
+	s.StateMutex.Mut(InitCid(cid))
 }
 
 func (s *SSE) removeClient(cid int) {
-	s.StateMutex.Do(RemoveCid(cid))
+	s.StateMutex.Mut(RemoveCid(cid))
 }
 
 func (s *SSE) Clients() Clients {
-	return s.StateMutex.Unwrap().Clients
+	return s.StateMutex.Get().Clients
 }
 
 func (s *SSE) handleSSE(w http.ResponseWriter, r *http.Request) {
